@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import { sendTemplateMessage, sendTextMessage } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import {
   sanitizePhoneForMeta,
@@ -45,7 +45,7 @@ interface BroadcastResult {
  */
 interface NewRecipient {
   phone: string
-  params?: string[]
+  params?: Array<string | { key: string; value: string }>
 }
 
 export async function POST(request: Request) {
@@ -76,6 +76,8 @@ export async function POST(request: Request) {
       template_name,
       template_language,
       template_params,
+      send_as_text,
+      message_body,
     } = body
 
     // Normalize to a list of {phone, params} regardless of shape.
@@ -150,17 +152,37 @@ export async function POST(request: Request) {
 
       for (const variant of variants) {
         try {
-          const result = await sendTemplateMessage({
-            phoneNumberId: config.phone_number_id,
-            accessToken,
-            to: variant,
-            templateName: template_name,
-            language: template_language || 'en_US',
-            params: recipient.params ?? [],
-          })
-          sentMessageId = result.messageId
-          lastError = null
-          break
+          if (send_as_text && message_body) {
+            // CRM/pending template: substitute {{1}}, {{2}} or {{customer_name}} placeholders
+            const params = recipient.params ?? []
+            let text = message_body as string
+            params.forEach((p, idx) => {
+              const k = typeof p === 'object' && p !== null ? p.key : String(idx + 1)
+              const v = typeof p === 'object' && p !== null ? p.value : String(p)
+              text = text.replaceAll(`{{${k}}}`, v)
+            })
+            const result = await sendTextMessage({
+              phoneNumberId: config.phone_number_id,
+              accessToken,
+              to: variant,
+              text,
+            })
+            sentMessageId = result.messageId
+            lastError = null
+            break
+          } else {
+            const result = await sendTemplateMessage({
+              phoneNumberId: config.phone_number_id,
+              accessToken,
+              to: variant,
+              templateName: template_name,
+              language: template_language || 'en_US',
+              params: recipient.params ?? [],
+            })
+            sentMessageId = result.messageId
+            lastError = null
+            break
+          }
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error'

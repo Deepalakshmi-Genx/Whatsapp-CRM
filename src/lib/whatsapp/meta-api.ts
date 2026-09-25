@@ -30,8 +30,12 @@ interface MetaErrorResponse {
 async function throwMetaError(response: Response, fallback: string): Promise<never> {
   let message = fallback
   try {
-    const data = (await response.json()) as MetaErrorResponse
-    if (data.error?.message) message = data.error.message
+    const data = (await response.json()) as any
+    if (data.error) {
+      const err = data.error
+      const details = err.error_data?.details || err.error_user_msg || err.message || fallback
+      message = `(#${err.code || 100}) ${details}`
+    }
   } catch {
     // response body wasn't JSON — keep the fallback
   }
@@ -119,7 +123,7 @@ export interface SendTemplateMessageArgs {
   to: string
   templateName: string
   language?: string
-  params?: string[]
+  params?: Array<string | { key: string; value: string }>
   /** Meta's message_id of the message being replied to. */
   contextMessageId?: string
 }
@@ -151,7 +155,15 @@ export async function sendTemplateMessage(
     template.components = [
       {
         type: 'body',
-        parameters: params.map((p) => ({ type: 'text', text: String(p) })),
+        parameters: params.map((p) => {
+          if (typeof p === 'object' && p !== null && 'key' in p) {
+            const isNumeric = /^\d+$/.test(p.key)
+            return isNumeric
+              ? { type: 'text', text: String(p.value) }
+              : { type: 'text', text: String(p.value), parameter_name: p.key }
+          }
+          return { type: 'text', text: String(p) }
+        }),
       },
     ]
   }

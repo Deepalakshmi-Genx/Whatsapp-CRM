@@ -32,20 +32,22 @@ interface TemplatePickerProps {
 // indices passed to the Graph API must be contiguous starting at 1.
 // We sort + dedupe here so a body using only {{2}} still drives a single
 // input slot, and so render-order matches send-order.
-function extractVariables(body: string): number[] {
-  const ids = new Set<number>();
-  for (const m of body.matchAll(/\{\{(\d+)\}\}/g)) {
-    ids.add(Number(m[1]));
+function extractVariables(body: string): string[] {
+  const ids = new Set<string>();
+  for (const m of body.matchAll(/\{\{([^}]+)\}\}/g)) {
+    ids.add(m[1]);
   }
-  return Array.from(ids).sort((a, b) => a - b);
+  return Array.from(ids);
 }
 
 function renderBodyPreview(body: string, params: string[]): string {
-  return body.replace(/\{\{(\d+)\}\}/g, (_, raw) => {
-    const idx = Number(raw) - 1;
-    const value = params[idx];
-    return value && value.trim().length > 0 ? value : `{{${raw}}}`;
+  const vars = extractVariables(body);
+  let text = body;
+  vars.forEach((varName, idx) => {
+    const val = params[idx];
+    text = text.replaceAll(`{{${varName}}}`, val && val.trim().length > 0 ? val : `{{${varName}}}`);
   });
+  return text;
 }
 
 export function TemplatePicker({

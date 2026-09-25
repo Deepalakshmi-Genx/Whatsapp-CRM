@@ -106,10 +106,29 @@ export function Step3Personalize({
   }, []);
 
   const placeholders = useMemo(() => {
-    const matches = template.body_text.match(/\{\{(\d+)\}\}/g);
+    const matches = template.body_text.match(/\{\{([^}]+)\}\}/g);
     if (!matches) return [];
     return [...new Set(matches)].sort();
   }, [template.body_text]);
+
+  // Auto-initialize default mapping (Contact Name) for any unmapped placeholders
+  useEffect(() => {
+    if (placeholders.length > 0) {
+      const nextVars = { ...variables };
+      let updated = false;
+      for (const placeholder of placeholders) {
+        const key = placeholder.replace(/^\{\{|\}\}$/g, '');
+        if (!nextVars[key] || !nextVars[key].value) {
+          nextVars[key] = { type: 'field', value: 'name' };
+          updated = true;
+        }
+      }
+      if (updated) {
+        onUpdate(nextVars);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeholders]);
 
   /**
    * A placeholder is "unmapped" if the user hasn't picked either a

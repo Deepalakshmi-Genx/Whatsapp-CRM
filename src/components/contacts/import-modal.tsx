@@ -29,31 +29,65 @@ interface ParsedRow {
 
 function parseCSV(text: string): ParsedRow[] {
   const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
+  if (lines.length < 1) return [];
 
-  const headerLine = lines[0];
-  const headers = headerLine.split(',').map((h) => h.trim().toLowerCase().replace(/["']/g, ''));
+  // Strip UTF-8 BOM marker if present
+  let headerLine = lines[0];
+  if (headerLine.charCodeAt(0) === 0xFEFF) {
+    headerLine = headerLine.slice(1);
+  }
 
-  const phoneIdx = headers.indexOf('phone');
+  // Handle delimiter: comma, semicolon, or tab
+  const delimiter = headerLine.includes(';') ? ';' : headerLine.includes('\t') ? '\t' : ',';
+
+  const headers = headerLine.split(delimiter).map((h) => h.trim().toLowerCase().replace(/["'\r]/g, ''));
+
+  // Flexible phone header detection
+  const phoneAliases = ['phone', 'mobile', 'cell', 'number', 'contact', 'telephone', 'ph'];
+  let phoneIdx = headers.findIndex((h) => phoneAliases.some((alias) => h.includes(alias)));
+
+  // Flexible name header detection
+  const nameAliases = ['name', 'first', 'contact', 'full_name', 'person', 'customer'];
+  let nameIdx = headers.findIndex((h) => nameAliases.some((alias) => h.includes(alias) && alias !== 'contact'));
+
+  // Flexible email header detection
+  const emailAliases = ['email', 'mail'];
+  let emailIdx = headers.findIndex((h) => emailAliases.some((alias) => h.includes(alias)));
+
+  // Flexible company header detection
+  const companyAliases = ['company', 'organization', 'business', 'org'];
+  let companyIdx = headers.findIndex((h) => companyAliases.some((alias) => h.includes(alias)));
+
+  // Fallback: If no header matches "phone", inspect data row 1 for digit sequences
+  if (phoneIdx === -1 && lines.length > 1) {
+    const sampleLine = lines[1].split(delimiter);
+    for (let c = 0; c < sampleLine.length; c++) {
+      const val = sampleLine[c]?.replace(/\D/g, '');
+      if (val && val.length >= 7) {
+        phoneIdx = c;
+        break;
+      }
+    }
+  }
+
   if (phoneIdx === -1) return [];
 
-  const nameIdx = headers.indexOf('name');
-  const emailIdx = headers.indexOf('email');
-  const companyIdx = headers.indexOf('company');
+  const hasHeader = phoneAliases.some((alias) => headers[phoneIdx]?.includes(alias));
+  const startRow = hasHeader ? 1 : 0;
 
   const rows: ParsedRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = startRow; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Simple CSV parse (handles quoted fields)
+    // CSV parse line with quotes
     const values: string[] = [];
     let current = '';
     let inQuotes = false;
     for (const char of line) {
       if (char === '"') {
         inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
+      } else if (char === delimiter && !inQuotes) {
         values.push(current.trim());
         current = '';
       } else {
@@ -62,15 +96,18 @@ function parseCSV(text: string): ParsedRow[] {
     }
     values.push(current.trim());
 
-    const phone = values[phoneIdx]?.replace(/["']/g, '').trim();
-    if (!phone) continue;
+    const phoneRaw = values[phoneIdx]?.replace(/["'\r]/g, '').trim();
+    if (!phoneRaw) continue;
+
+    // Clean phone number (keep digits and +)
+    const phone = phoneRaw.replace(/[^\d+]/g, '');
+    if (!phone || phone.length < 5) continue;
 
     rows.push({
       phone,
-      name: nameIdx >= 0 ? values[nameIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
-      email: emailIdx >= 0 ? values[emailIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
-      company:
-        companyIdx >= 0 ? values[companyIdx]?.replace(/["']/g, '').trim() || undefined : undefined,
+      name: nameIdx >= 0 && nameIdx !== phoneIdx ? values[nameIdx]?.replace(/["'\r]/g, '').trim() || undefined : undefined,
+      email: emailIdx >= 0 ? values[emailIdx]?.replace(/["'\r]/g, '').trim() || undefined : undefined,
+      company: companyIdx >= 0 ? values[companyIdx]?.replace(/["'\r]/g, '').trim() || undefined : undefined,
     });
   }
 

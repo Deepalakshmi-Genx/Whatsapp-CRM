@@ -77,42 +77,56 @@ export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack
           <p className="mt-1 text-xs text-slate-500">Create a template in Settings first.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {templates.map((template) => {
-            const isSelected = selectedTemplate?.id === template.id;
-            const catColor = categoryColors[template.category] ?? categoryColors.Utility;
+        <div className="space-y-3">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
+            ⚡ <strong>Approved</strong> templates use Meta&apos;s API. <strong>Pending</strong> templates are sent as free-form text (works for contacts who messaged you in the last 24 h, or test numbers).
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {templates.map((template) => {
+              const isSelected = selectedTemplate?.id === template.id;
+              const catColor = categoryColors[template.category] ?? categoryColors.Utility;
+              const isApproved = template.status?.toLowerCase() === 'approved';
 
-            return (
-              <button
-                key={template.id}
-                onClick={() => onSelect(template)}
-                className={`flex flex-col gap-3 rounded-xl border p-4 text-left transition-all ${
-                  isSelected
-                    ? 'border-violet-500 bg-violet-500/5 ring-1 ring-violet-500/30'
-                    : 'border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <h3 className="text-sm font-medium text-white">{template.name}</h3>
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor}`}
-                  >
-                    {template.category}
-                  </span>
-                </div>
-                <p className="line-clamp-3 text-xs text-slate-400">{template.body_text}</p>
-                <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                  <span>{template.language ?? 'en_US'}</span>
-                  {template.status && (
-                    <>
-                      <span>-</span>
-                      <span>{template.status}</span>
-                    </>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={template.id}
+                  onClick={() => onSelect(template)}
+                  className={`flex flex-col gap-3 rounded-xl border p-4 text-left transition-all ${
+                    isSelected
+                      ? 'border-violet-500 bg-violet-500/5 ring-1 ring-violet-500/30'
+                      : 'border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-medium text-white">{template.name}</h3>
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${catColor}`}
+                    >
+                      {template.category}
+                    </span>
+                  </div>
+                  <p className="line-clamp-3 text-xs text-slate-400">{template.body_text}</p>
+                  <div className="flex items-center gap-2 text-[10px]">
+                    <span className="text-slate-500">{template.language ?? 'en_US'}</span>
+                    {template.status && (
+                      <>
+                        <span className="text-slate-600">·</span>
+                        <span
+                          className={
+                            isApproved
+                              ? 'font-medium text-green-400'
+                              : 'font-medium text-amber-400'
+                          }
+                        >
+                          {isApproved ? '✓ Approved' : '⏳ Send as text'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

@@ -80,9 +80,8 @@ export function resolveVariables(
   variables: Record<string, VariableMapping>,
   contact: Contact,
   customValues?: Map<string, string>,
-): string[] {
-  // Keys are typically "1","2",... — numeric-aware sort keeps
-  // {{1}} before {{10}}.
+): Array<{ key: string; value: string }> {
+  // Keys are typically "1","2",... or "customer_name"
   const keys = Object.keys(variables).sort((a, b) => {
     const an = Number(a);
     const bn = Number(b);
@@ -92,20 +91,23 @@ export function resolveVariables(
 
   return keys.map((key) => {
     const v = variables[key];
-    if (v.type === 'static') return v.value;
-
-    if (v.type === 'field') {
+    let val = '';
+    if (v.type === 'static') {
+      val = v.value || 'Valued Customer';
+    } else if (v.type === 'field') {
       const fieldMap: Record<string, string | undefined> = {
         name: contact.name,
         phone: contact.phone,
         email: contact.email,
         company: contact.company,
       };
-      return fieldMap[v.value] ?? '';
+      const fVal = fieldMap[v.value];
+      val = fVal && fVal.trim().length > 0 ? fVal : (contact.name || contact.phone || 'Customer');
+    } else {
+      const customVal = customValues?.get(v.value);
+      val = customVal && customVal.trim().length > 0 ? customVal : (contact.name || 'Customer');
     }
-
-    // custom_field
-    return customValues?.get(v.value) ?? '';
+    return { key, value: val };
   });
 }
 
@@ -443,6 +445,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         if (apiRecipients.length === 0) continue;
 
         try {
+          const isApproved = payload.template.status?.toLowerCase() === 'approved'
           const res = await fetch('/api/whatsapp/broadcast', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -450,6 +453,14 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
               recipients: apiRecipients,
               template_name: payload.template.name,
               template_language: payload.template.language ?? 'en_US',
+              // For pending/CRM templates, send as free-form text instead
+              // of calling the Meta template API (which requires approval).
+              ...(isApproved
+                ? {}
+                : {
+                    send_as_text: true,
+                    message_body: payload.template.body_text,
+                  }),
             }),
           });
 
