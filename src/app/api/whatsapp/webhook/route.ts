@@ -5,6 +5,7 @@ import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
 import { normalizePhone, phonesMatch } from '@/lib/whatsapp/phone-utils'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
+import { isHotelBookingEnabled, tryHandleHotelBooking } from '@/lib/hotel-booking/handler'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +33,11 @@ interface WhatsAppMessage {
   sticker?: { id: string; mime_type: string }
   location?: { latitude: number; longitude: number; name?: string; address?: string }
   reaction?: { message_id: string; emoji: string }
+  interactive?: {
+    type?: string
+    button_reply?: { id: string; title: string }
+    list_reply?: { id: string; title: string; description?: string }
+  }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
 }
@@ -509,7 +515,9 @@ async function processMessage(
     ? message.type
     : message.type === 'sticker'
       ? 'image'   // stickers are images
-      : 'text'    // reaction, unknown → text fallback
+      : message.type === 'interactive'
+        ? 'text'
+        : 'text'    // reaction, unknown → text fallback
 
   // Determine whether this is the contact's very first inbound message
   // BEFORE we insert, so the count is accurate. Covers the case where
@@ -565,6 +573,27 @@ async function processMessage(
   // Fire-and-forget: a slow or failing automation must not block the
   // webhook's 200 OK response to Meta.
   const inboundText = contentText ?? message.text?.body ?? ''
+  const interactiveId =
+    message.interactive?.button_reply?.id ||
+    message.interactive?.list_reply?.id ||
+    undefined
+
+  const hotelEnabled = await isHotelBookingEnabled(userId)
+  if (hotelEnabled) {
+    tryHandleHotelBooking({
+      userId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      phone: senderPhone,
+      contactName: contactName,
+      text: inboundText,
+      interactiveId,
+      hasMedia: Boolean(mediaUrl) || message.type === 'image' || message.type === 'document',
+      messageId: message.id,
+    }).catch((err) => console.error('[hotel-booking] dispatch failed:', err))
+    return
+  }
+
   const automationTriggers: (
     | 'new_contact_created'
     | 'first_inbound_message'
@@ -694,6 +723,18 @@ async function parseMessageContent(
         }
       }
       return { contentText: null, mediaUrl: null, mediaType: null }
+
+    case 'interactive': {
+      const title =
+        message.interactive?.button_reply?.title ||
+        message.interactive?.list_reply?.title ||
+        null
+      return {
+        contentText: title,
+        mediaUrl: null,
+        mediaType: null,
+      }
+    }
 
     case 'reaction':
       return {

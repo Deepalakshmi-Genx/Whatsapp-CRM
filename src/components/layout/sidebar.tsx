@@ -13,6 +13,7 @@ import {
   GitBranch,
   Radio,
   Zap,
+  Hotel,
   Settings,
   LogOut,
   User,
@@ -38,6 +39,7 @@ const navItems = [
   { href: "/pipelines", label: "Pipelines", icon: GitBranch },
   { href: "/broadcasts", label: "Broadcasts", icon: Radio },
   { href: "/automations", label: "Automations", icon: Zap },
+  { href: "/hotel-booking", label: "Hotel Booking", icon: Hotel },
 ];
 
 const bottomNavItems = [

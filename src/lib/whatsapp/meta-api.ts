@@ -290,3 +290,142 @@ export async function downloadMedia(
   const buffer = Buffer.from(await response.arrayBuffer())
   return { buffer, contentType }
 }
+
+export interface SendImageMessageArgs {
+  phoneNumberId: string
+  accessToken: string
+  to: string
+  link: string
+  caption?: string
+}
+
+export async function sendImageMessage(
+  args: SendImageMessageArgs,
+): Promise<MetaSendResult> {
+  const { phoneNumberId, accessToken, to, link, caption } = args
+  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'image',
+      image: { link, caption },
+    }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  return { messageId: data.messages[0].id }
+}
+
+export interface InteractiveButton {
+  id: string
+  title: string
+}
+
+export interface SendInteractiveButtonsArgs {
+  phoneNumberId: string
+  accessToken: string
+  to: string
+  body: string
+  buttons: InteractiveButton[]
+}
+
+export async function sendInteractiveButtons(
+  args: SendInteractiveButtonsArgs,
+): Promise<MetaSendResult> {
+  const { phoneNumberId, accessToken, to, body, buttons } = args
+  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: body.slice(0, 1024) },
+        action: {
+          buttons: buttons.slice(0, 3).map((b) => ({
+            type: 'reply',
+            reply: { id: b.id, title: b.title.slice(0, 20) },
+          })),
+        },
+      },
+    }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  return { messageId: data.messages[0].id }
+}
+
+export interface InteractiveListRow {
+  id: string
+  title: string
+  description?: string
+}
+
+export interface SendInteractiveListArgs {
+  phoneNumberId: string
+  accessToken: string
+  to: string
+  body: string
+  button: string
+  rows: InteractiveListRow[]
+}
+
+export async function sendInteractiveList(
+  args: SendInteractiveListArgs,
+): Promise<MetaSendResult> {
+  const { phoneNumberId, accessToken, to, body, button, rows } = args
+  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: body.slice(0, 1024) },
+        action: {
+          button: button.slice(0, 20),
+          sections: [
+            {
+              title: 'Options',
+              rows: rows.slice(0, 10).map((r) => ({
+                id: r.id,
+                title: r.title.slice(0, 24),
+                description: r.description?.slice(0, 72),
+              })),
+            },
+          ],
+        },
+      },
+    }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  return { messageId: data.messages[0].id }
+}
